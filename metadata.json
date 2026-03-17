@@ -1,0 +1,7 @@
+{
+  "name": "SafeQMS",
+  "description": "En komplett plattform för att hjälpa företag att bli certifierade enligt ISO 9001, 14001 och 45001 med AI-drivet stöd för mallar, avvikelsehantering och intern kommunikation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
