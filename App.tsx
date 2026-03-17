@@ -64,7 +64,11 @@ import {
   ChevronFirst,
   ChevronLast,
   Printer,
-  Maximize2
+  Maximize2,
+  FilePlus,
+  Folders,
+  Eye,
+  FileCheck
 } from 'lucide-react';
 import { ISO_CHAPTERS } from './constants';
 import { 
@@ -74,6 +78,8 @@ import {
   Message, 
   User, 
   LinkedDocument, 
+  EnhancedDocument,
+  DocumentSubTab,
   DocumentType, 
   DocumentStatus,
   CalendarEvent,
@@ -115,8 +121,6 @@ type Tab =
   | 'templates' 
   | 'profile'
   | 'documents';
-
-type DocumentSubTab = 'mine' | 'search' | 'manage' | 'links';
 
 // --- Sub-components ---
 
@@ -179,10 +183,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isDocMenuOpen, setIsDocMenuOpen] = useState(false);
-  const [activeDocSubTab, setActiveDocSubTab] = useState<DocumentSubTab>('mine');
+  const [activeDocSubTab, setActiveDocSubTab] = useState<DocumentSubTab>('library');
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [chapters, setChapters] = useState<ISOChapter[]>(ISO_CHAPTERS);
   const [selectedStandard, setSelectedStandard] = useState<ISOStandard>('9001');
-  
+
+  const [creationForm, setCreationForm] = useState({
+    name: '',
+    folder: 'Allmänt',
+    publish: false
+  });
+
+  const folders = ['Kvalitet', 'Miljö', 'Arbetsmiljö', 'HR', 'Ledning', 'Allmänt'];
+
   const [currentUser, setCurrentUser] = useState<User>({ 
     name: 'Rami Haasén', 
     email: 'rami@korrektum.se', 
@@ -194,13 +209,40 @@ export default function App() {
     favoriteDocIds: ['doc1']
   });
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDocument, setSelectedDocument] = useState<LinkedDocument | null>(null);
+  const [isDocDetailOpen, setIsDocDetailOpen] = useState(false);
+  const [isEditingDoc, setIsEditingDoc] = useState(false);
+  const [docEditContent, setDocEditContent] = useState('');
+
   const [allDocuments, setAllDocuments] = useState<LinkedDocument[]>([
-    { id: 'doc1', name: 'Rutin för avvikelsehantering', type: 'rutin', status: 'godkänd', lastEdited: '2024-04-15', owner: 'Rami Haasén' },
-    { id: 'doc2', name: 'Miljöpolicy 2024', type: 'process', status: 'utkast', lastEdited: '2024-05-01', owner: 'Rami Haasén' },
-    { id: 'doc3', name: 'Utbildningsplan HR', type: 'bilaga', status: 'godkänd', lastEdited: '2024-03-20', owner: 'Rami Haasén' },
-    { id: 'doc4', name: 'Brandskyddsinstruktion', type: 'instruktion', status: 'godkänd', lastEdited: '2024-02-10', owner: 'Sven Säkerhet' },
-    { id: 'doc5', name: 'Ledningens genomgång - Protokoll', type: 'bilaga', status: 'godkänd', lastEdited: '2024-01-15', owner: 'Rami Haasén' }
+    { 
+      id: 'doc1', 
+      name: 'Rutin för avvikelsehantering', 
+      type: 'rutin', 
+      status: 'godkänd', 
+      lastEdited: '2024-04-15', 
+      owner: 'Rami Haasén',
+      content: '# Rutin för avvikelsehantering\n\n## 1. Syfte\nSyftet med denna rutin är att säkerställa att alla avvikelser identifieras, dokumenteras och åtgärdas.\n\n## 2. Omfattning\nDenna rutin gäller för alla anställda på Korrektum AB.',
+      version: '1.2',
+      category: 'Kvalitet',
+      folder: 'Kvalitet',
+      history: [{ date: '2024-04-15', user: 'Rami Haasén', action: 'Godkänd', version: '1.2' }]
+    },
+    { 
+      id: 'doc2', 
+      name: 'Miljöpolicy 2024', 
+      type: 'process', 
+      status: 'utkast', 
+      lastEdited: '2024-05-01', 
+      owner: 'Rami Haasén',
+      content: '# Miljöpolicy\n\nVi strävar efter att minimera vår miljöpåverkan...',
+      version: '0.9',
+      category: 'Miljö',
+      folder: 'Miljö'
+    },
+    { id: 'doc3', name: 'Utbildningsplan HR', type: 'bilaga', status: 'godkänd', lastEdited: '2024-03-20', owner: 'Rami Haasén', category: 'HR', folder: 'HR' },
+    { id: 'doc4', name: 'Brandskyddsinstruktion', type: 'instruktion', status: 'godkänd', lastEdited: '2024-02-10', owner: 'Sven Säkerhet', category: 'Säkerhet', folder: 'Allmänt' },
+    { id: 'doc5', name: 'Ledningens genomgång - Protokoll', type: 'bilaga', status: 'godkänd', lastEdited: '2024-01-15', owner: 'Rami Haasén', category: 'Ledning', folder: 'Ledning' }
   ]);
 
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
@@ -348,6 +390,72 @@ export default function App() {
     alert('Dina uppgifter har sparats!');
   };
 
+  const handleOpenDoc = (doc: LinkedDocument) => {
+    setSelectedDocument(doc);
+    setDocEditContent(doc.content || '');
+    setIsDocDetailOpen(true);
+    setIsEditingDoc(false);
+  };
+
+  const handleSaveDoc = () => {
+    if (!selectedDocument) return;
+    
+    const updatedDoc: LinkedDocument = {
+      ...selectedDocument,
+      content: docEditContent,
+      lastEdited: new Date().toISOString().split('T')[0],
+      status: 'utkast',
+      version: (parseFloat(selectedDocument.version || '0.0') + 0.1).toFixed(1),
+      history: [
+        ...(selectedDocument.history || []),
+        { 
+          date: new Date().toISOString().split('T')[0], 
+          user: currentUser.name, 
+          action: 'Uppdaterad', 
+          version: (parseFloat(selectedDocument.version || '0.0') + 0.1).toFixed(1) 
+        }
+      ]
+    };
+
+    setAllDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+    setSelectedDocument(updatedDoc);
+    setIsEditingDoc(false);
+  };
+
+  const handleAiImproveDoc = async () => {
+    if (!selectedDocument) return;
+    setIsLoading(true);
+    const prompt = `Förbättra följande dokumentinnehåll för att bättre uppfylla ISO-krav. Behåll Markdown-formatering:\n\n${docEditContent}`;
+    const improved = await askISOConsultant(prompt, []);
+    if (improved) {
+      setDocEditContent(improved);
+    }
+    setIsLoading(false);
+  };
+
+  const handleApproveDoc = () => {
+    if (!selectedDocument) return;
+    
+    const updatedDoc: LinkedDocument = {
+      ...selectedDocument,
+      status: 'godkänd',
+      approver: currentUser.name,
+      lastEdited: new Date().toISOString().split('T')[0],
+      history: [
+        ...(selectedDocument.history || []),
+        { 
+          date: new Date().toISOString().split('T')[0], 
+          user: currentUser.name, 
+          action: 'Godkänd', 
+          version: selectedDocument.version || '1.0' 
+        }
+      ]
+    };
+
+    setAllDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+    setSelectedDocument(updatedDoc);
+  };
+
   const handleUpdatePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordForm.new !== passwordForm.confirm) {
@@ -381,13 +489,52 @@ export default function App() {
   const filteredDocs = useMemo(() => {
     let list = allDocuments;
     if (searchQuery) {
-      list = list.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      list = list.filter(d => 
+        d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.category?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    if (selectedFolder) {
+      list = list.filter(d => d.folder === selectedFolder);
     }
     if (activeDocSubTab === 'mine') {
       list = list.filter(d => d.owner === currentUser.name);
     }
     return list;
-  }, [allDocuments, searchQuery, activeDocSubTab, currentUser.name]);
+  }, [allDocuments, searchQuery, selectedFolder, activeDocSubTab, currentUser.name]);
+
+  const handleAiDraftGenerator = async () => {
+    if (!creationForm.name) return alert("Ange ett namn på dokumentet först.");
+    setIsLoading(true);
+    const draft = await generateISOTemplate(creationForm.name, selectedStandard);
+    setAiPanel({ isOpen: true, title: `AI-Utkast: ${creationForm.name}`, content: draft });
+    setIsLoading(false);
+  };
+
+  const handleAiSummary = async (doc: LinkedDocument) => {
+    setIsLoading(true);
+    const summary = await askISOConsultant(`Sammanfatta syftet med "${doc.name}"...`, []);
+    setAiPanel({ isOpen: true, title: `AI-Analys: ${doc.name}`, content: summary });
+    setIsLoading(false);
+  };
+
+  const showDocumentDetails = (docId: string) => {
+    const doc = allDocuments.find(d => d.id === docId);
+    if (doc) handleOpenDoc(doc);
+  };
+
+  const toggleFavoriteDoc = (docId: string) => {
+    setCurrentUser(prev => {
+      const isFav = prev.favoriteDocIds.includes(docId);
+      return {
+        ...prev,
+        favoriteDocIds: isFav 
+          ? prev.favoriteDocIds.filter(id => id !== docId)
+          : [...prev.favoriteDocIds, docId]
+      };
+    });
+  };
 
   const handleCalendarNav = (direction: number) => {
     const newDate = new Date(currentCalendarDate);
@@ -944,7 +1091,7 @@ export default function App() {
                     type: formData.get('type') as any,
                     category: formData.get('category') as string,
                     completed: false,
-                    recurrence: 'none'
+                    recurrence: formData.get('recurrence') as any
                   });
                 }}
                 className="p-8 space-y-6"
@@ -974,9 +1121,20 @@ export default function App() {
                     </select>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Datum</label>
-                  <input name="date" type="date" defaultValue={newEventDate} required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-bold" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Datum</label>
+                    <input name="date" type="date" defaultValue={newEventDate} required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Återkommande</label>
+                    <select name="recurrence" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-bold">
+                      <option value="none">Ingen</option>
+                      <option value="monthly">Månadsvis</option>
+                      <option value="quarterly">Kvartalsvis</option>
+                      <option value="yearly">Årsvis</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1285,44 +1443,265 @@ export default function App() {
 
         {/* DOCUMENTS TAB */}
         {activeTab === 'documents' && (
-          <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500">
-            <header className="flex justify-between items-end border-b border-slate-200 pb-8">
+          <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+            <header className="flex justify-between items-end border-b pb-8">
                <div>
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-1">Dokumentarkiv</h2>
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Central lagring av alla styrande dokument</p>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-1">
+                    {activeDocSubTab === 'library' ? 'Dokumentbibliotek' : 
+                     activeDocSubTab === 'templates' ? 'Mallbibliotek' : 
+                     activeDocSubTab === 'creation' ? 'Skapa Nytt Dokument' : 'Dokumentdetaljer'}
+                  </h2>
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Digital Ledningsdokumentation</p>
                </div>
-               <div className="flex gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                    <input 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-12 pr-6 py-3 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-600 text-sm font-medium w-64 shadow-sm" 
-                      placeholder="Sök dokument..." 
-                    />
-                  </div>
-                  <button className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2">
-                    <Plus size={16}/> Nytt Dokument
+               <div className="flex gap-4">
+                  <button onClick={() => setActiveDocSubTab('creation')} className="flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                    <FilePlus size={18}/> Nytt Dokument
                   </button>
                </div>
             </header>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredDocs.map(doc => (
-                <div key={doc.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all group">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className={`p-4 rounded-2xl ${doc.type === 'rutin' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      <FileBadge size={24}/>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${doc.status === 'godkänd' ? 'bg-emerald-100 text-emerald-600' : 'bg-yellow-100 text-yellow-600'}`}>{doc.status}</span>
+
+            {/* Sub-navigation */}
+            <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border w-fit shadow-sm">
+               {[
+                 { id: 'library', label: 'Bibliotek', icon: <Folders size={14}/> },
+                 { id: 'templates', label: 'Mallar', icon: <FileText size={14}/> },
+                 { id: 'creation', label: 'Skapa Nytt', icon: <Sparkles size={14}/> }
+               ].map(tab => (
+                 <button 
+                  key={tab.id} 
+                  onClick={() => setActiveDocSubTab(tab.id as any)}
+                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeDocSubTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+                 >
+                   {tab.icon} {tab.label}
+                 </button>
+               ))}
+            </div>
+
+            {/* Biblioteksvyn */}
+            {activeDocSubTab === 'library' && (
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                {/* Mapp-navigering */}
+                <div className="lg:col-span-1 space-y-2">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                    <FolderOpen size={14}/> Mapper
+                  </h4>
+                  <button onClick={() => setSelectedFolder(null)} className={`w-full flex items-center justify-between px-5 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${!selectedFolder ? 'bg-slate-900 text-white shadow-lg' : 'bg-white border text-slate-500 hover:bg-slate-100'}`}>
+                    <span>Alla Dokument</span>
+                    <span className="opacity-40">{allDocuments.length}</span>
+                  </button>
+                  {folders.map(f => (
+                    <button key={f} onClick={() => setSelectedFolder(f)} className={`w-full flex items-center justify-between px-5 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${selectedFolder === f ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border text-slate-500 hover:bg-slate-100'}`}>
+                      <span>{f}</span>
+                      <span className="opacity-40">{allDocuments.filter(d => d.folder === f).length}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Dokumentlista */}
+                <div className="lg:col-span-3 space-y-6">
+                  <div className="relative">
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <input className="w-full pl-16 pr-8 py-5 bg-white border border-slate-200 rounded-3xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-50 shadow-sm" placeholder="Sök i biblioteket..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                   </div>
-                  <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-1 truncate">{doc.name}</h4>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">{doc.type} | {doc.owner}</p>
-                  <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ändrad: {doc.lastEdited}</span>
-                    <button className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><ExternalLink size={18}/></button>
+
+                  <div className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Namn</th>
+                          <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Åtgärder</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredDocs.map(doc => (
+                          <tr key={doc.id} onClick={() => showDocumentDetails(doc.id)} className="hover:bg-slate-50 transition-colors group cursor-pointer">
+                            <td className="px-8 py-6">
+                              <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-xl shadow-sm ${doc.type === 'rutin' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                  <FileText size={20}/>
+                                </div>
+                                <div>
+                                  <p className="text-[12px] font-black text-slate-900 uppercase tracking-tight">{doc.name}</p>
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{doc.folder}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6 text-right">
+                              <div className="flex justify-end gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); handleAiSummary(doc as any); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"><Bot size={14}/> AI Analys</button>
+                                <button className="p-2 hover:bg-white rounded-lg border text-slate-400 hover:text-blue-600 transition-all shadow-sm"><Eye size={16}/></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Skapa Nytt Dokument (AI-fokus) */}
+            {activeDocSubTab === 'creation' && (
+              <div className="max-w-4xl mx-auto space-y-8">
+                <div className="bg-gradient-to-r from-indigo-900 to-blue-900 p-8 rounded-[3rem] text-white flex items-center justify-between shadow-2xl relative overflow-hidden">
+                   <div className="relative z-10 flex items-center gap-6">
+                      <div className="w-16 h-16 rounded-[1.5rem] bg-white/10 flex items-center justify-center backdrop-blur-md">
+                         <Sparkles size={32} className="text-blue-300 animate-pulse"/>
+                      </div>
+                      <div>
+                         <h4 className="text-lg font-black uppercase tracking-tight">AI-Assisterat Skapande</h4>
+                         <p className="text-xs font-bold text-blue-200 uppercase tracking-widest">Generera utkast och få smarta förslag</p>
+                      </div>
+                   </div>
+                   <button onClick={handleAiDraftGenerator} className="relative z-10 bg-white text-indigo-900 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl">Generera Utkast</button>
+                </div>
+
+                <Card title="Dokumentdetaljer" className="p-10">
+                  <div className="space-y-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Dokumentets Namn</label>
+                          <input className="w-full p-5 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="t.ex. Rutin för Onboarding" value={creationForm.name} onChange={(e) => setCreationForm({...creationForm, name: e.target.value})} />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Kategori / Mapp</label>
+                          <select className="w-full p-5 bg-slate-50 border rounded-2xl font-bold outline-none" value={creationForm.folder} onChange={(e) => setCreationForm({...creationForm, folder: e.target.value})}>
+                             {folders.map(f => <option key={f}>{f}</option>)}
+                          </select>
+                       </div>
+                    </div>
+                    <div className="pt-6 border-t flex gap-4">
+                       <button onClick={() => setActiveDocSubTab('library')} className="flex-1 bg-slate-100 text-slate-900 py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all">Spara Utkast</button>
+                       <button onClick={() => { alert('Dokument publicerat!'); setActiveDocSubTab('library'); }} className="flex-2 bg-blue-600 text-white py-5 px-12 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-3">
+                          <FileCheck size={18}/> Publicera Version 1.0
+                       </button>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DOCUMENT DETAIL MODAL */}
+        {isDocDetailOpen && selectedDocument && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[3rem] shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-white rounded-2xl border shadow-sm text-blue-600">
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{selectedDocument.name}</h3>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Version {selectedDocument.version || '1.0'}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${selectedDocument.status === 'godkänd' ? 'text-emerald-600' : 'text-yellow-600'}`}>{selectedDocument.status}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {isEditingDoc ? (
+                    <>
+                      <button 
+                        disabled={isLoading}
+                        onClick={handleAiImproveDoc}
+                        className="px-6 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all flex items-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="animate-spin" size={14}/> : <Sparkles size={14}/>}
+                        Förbättra med AI
+                      </button>
+                      <button onClick={() => setIsEditingDoc(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Avbryt</button>
+                      <button onClick={handleSaveDoc} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">Spara Ändringar</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setIsEditingDoc(true)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2">
+                        <Edit2 size={14}/> Redigera
+                      </button>
+                      {selectedDocument.status !== 'godkänd' && currentUser.role === 'admin' && (
+                        <button onClick={handleApproveDoc} className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center gap-2">
+                          <CheckCircle2 size={14}/> Godkänn
+                        </button>
+                      )}
+                      <button className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 transition-all"><Printer size={20}/></button>
+                      <button onClick={() => setIsDocDetailOpen(false)} className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-red-500 transition-all"><X size={20}/></button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-white">
+                  {isEditingDoc ? (
+                    <textarea 
+                      value={docEditContent}
+                      onChange={(e) => setDocEditContent(e.target.value)}
+                      className="w-full h-full min-h-[500px] p-8 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-2 focus:ring-blue-600 font-mono text-sm leading-relaxed"
+                      placeholder="Skriv dokumentinnehåll här (Markdown stöds)..."
+                    />
+                  ) : (
+                    <div className="prose prose-slate max-w-none">
+                      <Markdown>{selectedDocument.content || '*Inget innehåll ännu.*'}</Markdown>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sidebar Info */}
+                <aside className="w-80 border-l border-slate-100 bg-slate-50/50 p-8 space-y-8 overflow-y-auto custom-scrollbar">
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Information</h4>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Ägare</span>
+                        <span className="text-[10px] font-black text-slate-900 uppercase">{selectedDocument.owner}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Typ</span>
+                        <span className="text-[10px] font-black text-slate-900 uppercase">{selectedDocument.type}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Kategori</span>
+                        <span className="text-[10px] font-black text-slate-900 uppercase">{selectedDocument.category || 'Osorterad'}</span>
+                      </div>
+                      {selectedDocument.approver && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">Godkänd av</span>
+                          <span className="text-[10px] font-black text-emerald-600 uppercase">{selectedDocument.approver}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Revisionshistorik</h4>
+                    <div className="space-y-4">
+                      {selectedDocument.history?.map((h, i) => (
+                        <div key={i} className="relative pl-6 border-l-2 border-slate-200 py-1">
+                          <div className="absolute -left-[9px] top-2 w-4 h-4 rounded-full bg-white border-2 border-blue-600"></div>
+                          <p className="text-[10px] font-black text-slate-900 uppercase">{h.action} - v{h.version}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">{h.date} | {h.user}</p>
+                        </div>
+                      )) || <p className="text-[10px] font-bold text-slate-400 italic">Ingen historik tillgänglig.</p>}
+                    </div>
+                  </div>
+
+                  <div className="pt-8 border-t border-slate-200">
+                    <button className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all group">
+                      <div className="flex items-center gap-3">
+                        <Paperclip size={16} className="text-slate-400 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Bilagor (0)</span>
+                      </div>
+                      <Plus size={14} className="text-slate-300" />
+                    </button>
+                  </div>
+                </aside>
+              </div>
             </div>
           </div>
         )}
@@ -1445,10 +1824,31 @@ export default function App() {
                        <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-tight mb-3">{chapter.title}</h4>
                        <p className="text-xs font-medium text-slate-500 leading-relaxed">{chapter.description}</p>
                     </div>
-                    <div className="p-4 bg-slate-50 border-t">
-                       <button onClick={() => openAiAdvice(chapter)} className="w-full py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2">
+                    <div className="p-4 bg-slate-50 border-t space-y-2">
+                       <button onClick={() => openAiAdvice(chapter)} className="w-full py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2">
                           <Sparkles size={14}/> Visa Krav & Råd
                        </button>
+                       <div className="pt-2 border-t border-slate-100">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Kopplade Dokument ({allDocuments.filter(d => d.category === chapter.number).length})</p>
+                          <div className="space-y-1">
+                             {allDocuments.filter(d => d.category === chapter.number).slice(0, 2).map(d => (
+                               <div key={d.id} onClick={() => handleOpenDoc(d)} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-100 cursor-pointer hover:border-blue-300 transition-all">
+                                  <span className="text-[10px] font-bold text-slate-600 truncate max-w-[150px]">{d.name}</span>
+                                  <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${d.status === 'godkänd' ? 'bg-emerald-50 text-emerald-600' : 'bg-yellow-50 text-yellow-600'}`}>{d.status}</span>
+                               </div>
+                             ))}
+                             <button 
+                               onClick={() => {
+                                 setActiveTab('documents');
+                                 setActiveDocSubTab('search');
+                                 setSearchQuery(chapter.number);
+                               }}
+                               className="w-full py-1 text-[9px] font-black text-blue-600 uppercase hover:underline text-center"
+                             >
+                               Visa alla...
+                             </button>
+                          </div>
+                       </div>
                     </div>
                  </div>
                ))}

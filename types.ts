@@ -4,13 +4,33 @@ export type ISOStandard = '9001' | '14001' | '45001';
 export type DocumentType = 'rutin' | 'bilaga' | 'process' | 'instruktion';
 export type DocumentStatus = 'saknas' | 'utkast' | 'godkänd';
 
+export type DocumentSubTab = 'library' | 'templates' | 'creation' | 'history' | 'details' | 'mine' | 'search' | 'manage' | 'links';
+
+export interface EnhancedDocument extends LinkedDocument {
+  version: string;
+  folder?: string;
+  linkedProcesses?: string[];
+  linkedISOChapters?: string[];
+  linkedLaws?: string[];
+  publishToIntranet: boolean;
+  history: { version: string; date: string; user: string; comment: string; action: string }[];
+}
+
 export interface LinkedDocument {
   id: string;
   name: string;
   type: DocumentType;
   status: DocumentStatus;
   lastEdited: string;
-  owner: string; 
+  owner: string;
+  content?: string;
+  version?: string;
+  reviewDate?: string;
+  approver?: string;
+  category?: string;
+  folder?: string;
+  tags?: string[];
+  history?: { date: string; user: string; action: string; version: string; comment?: string }[];
 }
 
 export interface ISOChapter {
