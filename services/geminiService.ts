@@ -1,13 +1,25 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize Gemini API client using the environment variable directly.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization of the Gemini AI client
+let aiInstance: GoogleGenAI | null = null;
+
+const getAi = () => {
+  if (!aiInstance) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set. Please add it to your environment variables.");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
 
 const SYSTEM_INSTRUCTION = "Du är en världsledande expert på ISO 9001, 14001 och 45001. Din uppgift är att hjälpa företag att bli certifierade genom att ge konkreta, praktiska och lätthanterliga råd på svenska. Var professionell men pedagogisk.";
 
 export const generateISOTemplate = async (topic: string, standard: string) => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Skapa en professionell företagsmall för följande ämne inom ISO ${standard}: "${topic}". Inkludera rubriker, syfte, ansvar och en tabell för uppföljning. Svara på svenska. Använd Markdown för formatering.`,
@@ -19,12 +31,13 @@ export const generateISOTemplate = async (topic: string, standard: string) => {
     return response.text;
   } catch (error) {
     console.error("Gemini API error:", error);
-    return "Ett fel uppstod vid generering av mallen.";
+    return error instanceof Error ? error.message : "Ett fel uppstod vid generering av mallen.";
   }
 };
 
 export const suggestAnnualPlan = async (standards: string[]) => {
   try {
+    const ai = getAi();
     // Using responseSchema to ensure the model returns a valid JSON array of objects with correct types.
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -69,6 +82,7 @@ export const suggestAnnualPlan = async (standards: string[]) => {
 
 export const suggestRequiredDocuments = async (chapter: string, standard: string) => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Lista vilka specifika dokument (rutiner, processer, bilagor) som krävs eller rekommenderas för kapitel ${chapter} i ISO ${standard}. Svara kortfattat på svenska i punktform.`,
@@ -86,6 +100,7 @@ export const suggestRequiredDocuments = async (chapter: string, standard: string
 
 export const getISOAdvice = async (chapter: string, standard: string) => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Förklara kapitel ${chapter} i ISO ${standard} och ge 3 konkreta steg för att uppfylla det. Svara på svenska.`,
@@ -103,6 +118,7 @@ export const getISOAdvice = async (chapter: string, standard: string) => {
 
 export const askISOConsultant = async (query: string, history: any[]) => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: query,
